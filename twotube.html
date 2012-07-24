@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+
+    <title>TwoTube</title>
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.min.js"></script>
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js"></script>
+    <script type="text/javascript">
+
+    var sidebyside = true;
+    var active1 = true;
+    var ytplayer1 = null;
+    var ytplayer2 = null;
+    var loadedVids = [false, false];
+    var state = "LOADING";
+
+    var localhostAlert = function(){
+        if (window.location.href.substring(0,4) === 'file'){
+            $("#alertdiv").text("You opened the page locally. FlashPlayer's security policy prevent "+
+                    "the controls from working, sorry. Host the page somewhere. "+
+                    "(a localhost server or dropbox will do it)");
+        }else{
+            $("#alertdiv").hide();
+        }
+    }
+
+    var getVideoID = function(yturl){
+        var video_id = yturl.split('v=')[1];
+        var ampersandPosition = video_id.indexOf('&');
+        if(ampersandPosition != -1) {
+          video_id = video_id.substring(0, ampersandPosition);
+        }
+        return video_id;
+    }
+
+    var createEmbedURL = function(videoid){
+        var start = "http://www.youtube.com/apiplayer?video_id=";
+        var end = "&enablejsapi=1&version=3";
+        return start + videoid + end;
+    }
+
+    var onYouTubePlayerReady = function(playerId){
+        ytplayer1 = document.getElementById("player1");
+        ytplayer2 = document.getElementById("player2");
+        ytplayer1.addEventListener("onStateChange", "onytplayer1StateChange");
+        ytplayer2.addEventListener("onStateChange", "onytplayer2StateChange");
+        //startvideos();
+    }
+
+    var onytplayer1StateChange = function(newState) { onytplayerStateChange(1, newState) }
+    var onytplayer2StateChange = function(newState) { onytplayerStateChange(2, newState) }
+
+    var onytplayerStateChange = function(playerid, newState) {
+        console.log("Player" + playerid + " new state: " + newState);
+        if (state !== "LOADING") {return}
+
+        if (newState === -1 && !loadedVids[playerid-1])
+        {
+            loadedVids[playerid-1] = true;
+        }
+        if (loadedVids[0] && loadedVids[1]){
+            startvideos();
+            state = "STARTED"
+        }
+    }
+
+    var drawLayout = function(){
+        if (sidebyside){
+            $("#player1").css('visibility', 'visible')
+            $("#player2").css('visibility', 'hidden')
+            $("#player1").width(640).height(360);
+            $("#player2").width(640).height(360);
+        } else {
+            $("#player1").width(853).height(480);
+            $("#player2").width(853).height(480);
+            if (active1) {
+                $("#player1").css('visibility', 'visible')
+                $("#player2").css('visibility', 'hidden')
+            }else{
+                $("#player1").css('visibility', 'hidden')
+                $("#player2").css('visibility', 'visible')
+            }
+        }
+    }
+
+    var hideDiv = function(div){
+        $("#"+div).css("position","relative");
+        $("#"+div).css("left","-2000px");
+    }
+    var showDiv = function(div){
+        $("#"+div).css("left","0px");
+    }
+
+    var startvideos = function() {
+        if (ytplayer1 && ytplayer2){
+            ytplayer1.playVideo();
+            ytplayer2.playVideo();
+            ytplayer2.mute();
+            return;
+        }
+    }
+
+    var playpause = function() {
+        if (!(ytplayer1 && ytplayer2)) {
+            return;
+        }
+        if (ytplayer1.getPlayerState() != 1 || ytplayer2.getPlayerState() != 1){
+            ytplayer1.playVideo();
+            ytplayer2.playVideo();
+        }else{
+            ytplayer1.pauseVideo();
+            ytplayer2.pauseVideo();
+        }
+    }
+
+    var switchAudio = function() {
+        if (!(ytplayer1 && ytplayer2)) {
+            return;
+        }
+        if (ytplayer1.isMuted()){
+            ytplayer1.unMute();
+            ytplayer2.mute();
+        }else{
+            ytplayer1.mute();
+            ytplayer2.unMute();
+        }
+    };
+
+    var loadURLS = function(){
+        swfobject.removeSWF("player1");
+        swfobject.removeSWF("player2");
+
+        var d1 = document.getElementById("videodiv1");
+        if (!d1) {
+            var d = document.createElement("div");
+            d.setAttribute("id", "videodiv1");
+            document.getElementById("container1").appendChild(d);
+        }
+        var d2 = document.getElementById("videodiv2");
+        if (!d2) {
+            var d = document.createElement("div");
+            d.setAttribute("id", "videodiv2");
+            document.getElementById("container1").appendChild(d);
+        }
+
+        yturl1 = createEmbedURL(getVideoID($("#video1").val()));
+        yturl2 = createEmbedURL(getVideoID($("#video2").val()));
+
+        var params = { allowScriptAccess: "always" };
+        var atts = { id: "player1" };
+        swfobject.embedSWF(yturl1, "videodiv1", "640", "360", "8", null, null, params, atts);
+
+        var atts = { id: "player2" };
+        swfobject.embedSWF(yturl2, "videodiv2", "640", "360", "8", null, null, params, atts);
+    };
+
+    var seekToPercentage = function(){
+        var percentage = $("#seeklist option:selected").val() / 100;
+
+        // this depends on both video being the same length
+        var seconds = ytplayer1.getDuration() * percentage;
+
+        ytplayer1.seekTo(seconds, true);
+        ytplayer2.seekTo(seconds, true);
+    };
+
+    var secToMin = function(sec){
+        sec = Math.round(sec);
+        minutes = Math.floor(sec/60);
+        seconds = sec % 60;
+        if (seconds.toString().length == 1){
+            return minutes + ":0" + seconds
+        }else{
+            return minutes + ":" + seconds
+        }
+    }
+
+    var toggleFullscreen = function(){
+        $("#container1").css("position","relative");
+        $("#container1").css("left","-2000px");
+    }
+
+    var updateVideoTime = function(){
+        if (!(ytplayer1 && ytplayer2)) {
+            return;
+        }
+        current = secToMin(ytplayer1.getCurrentTime());
+        total = secToMin(ytplayer1.getDuration());
+        $("#videolength").text(current + " / " + total);
+    }
+
+    $(document).ready(function(e) {
+        localhostAlert();
+
+        $("#gobutton").click(loadURLS);
+
+        $("#playpausebutton").click(playpause);
+        $("#switchaudiobutton").click(switchAudio);
+//        $("#switchvideobutton").click(...);
+
+        $("#seeklist").change(seekToPercentage)
+
+        // update the video timer every sec
+        setInterval("updateVideoTime()", 1000); 
+
+        $(document).keydown(function(e) {
+            console.log("pressed: " + e.which);
+            if(e.which == 32) { // SPACE
+                playpause();
+            }
+            if(e.which == 83) { // S 
+                switchAudio();
+            }
+            if(e.which == 88) { // X 
+                hideDiv("container1");
+                //active1 = !active1;
+                //drawLayout();
+            }
+            if(e.which == 70) { // F
+                toggleFullscreen();
+            }
+            if(e.which == 76) {
+                showDiv("container1");
+                //sidebyside = !sidebyside;
+                //drawLayout();
+            }
+        });
+    });
+    </script>
+
+    <style type="text/css">
+        body{
+            background-color: #EBEBEB;
+            font: 12px arial,sans-serif;
+            overflow:hidden;
+            margin: 0;
+            padding: 0;
+        }
+        div#bigcontainer{
+            border: 1px solid #CCC;
+            width: 100%;
+            padding: 3px 3px 3px 3px;
+            text-align: center;
+            background-image: -moz-linear-gradient(top,#555,#333);
+            background-image: -webkit-gradient(linear,left top,left bottom,from(#555),to(#333))
+        }
+        div#controls-container {
+            text-align: center;
+        }
+        .container{
+            display: inline-block; 
+        } 
+        .urlinput{
+            border: none;
+            height: auto;
+            border: 1px solid #999;
+        }
+        div#videolength{
+            font-size: large;
+        }
+
+        div#alertdiv{
+            border: 1px solid #900;
+            background-color: #FF1313;
+            padding: 8px;
+            text-align: center;
+            font-size: large;
+        }
+
+        div#header{
+            // background-color: #999;
+            height: 60px;
+            text-align: center;
+            vertical-align: middle;
+            padding:2px;
+            margin: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: block;
+        }
+
+        div#header-left{
+            float: left;
+        }
+        div#header-right{
+            float: right;
+        }
+        div#header-center{
+            text-align: center;
+            width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        #gobutton{
+            width: 56px;
+            height: 56px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="header">
+        <div id="header-left">
+            <h1>TwoTube</h1>
+        </div>
+        <div id="header-right">
+            <input type="button" id="gobutton" value="GO"/>
+        </div>
+        <div id="header-center">
+            <label for="video1">YouTube URL 1:</label>
+            <input type="text" id="video1" value="http://www.youtube.com/watch?v=9Vv_O7etZBQ&feature=g-user-u"  size="100" class="urlinput"/><br/>
+            <label for="video2">YouTube URL 2:</label>
+            <input type="text" id="video2" value="http://www.youtube.com/watch?v=yKlvnxpZBvc&feature=g-user-u" size="100" class="urlinput"/>
+        </div>
+    </div>
+
+    <div id="alertdiv"></div>
+
+    <div id="bigcontainer">
+        <div id="container1" class="container">
+            <div id='videodiv1'></div>
+        </div>
+        <div id="container2" class="container"> 
+            <div id='videodiv2'></div>
+        </div>
+    </div>
+
+<div id="controls-container">
+    <div id="videolength"></div>
+    <input type="button" id="playpausebutton" value="PLAY/PAUSE"/>
+    <input type="button" id="switchaudiobutton" value="Switch audio"/>
+    <input type="button" id="switchvideobutton" value="Switch layout"/>
+    <br/>
+    seek to:
+    <select name="seeklist" id="seeklist">
+        <option value='10'>10%</option>
+        <option value='20'>20%</option>
+        <option value='30'>30%</option>
+        <option value='40'>40%</option>
+        <option value='50'>50%</option>
+        <option value='60'>60%</option>
+        <option value='70'>70%</option>
+        <option value='80'>80%</option>
+        <option value='90'>90%</option>
+    </select> 
+
+    quality:
+    <select id="startquality" name="startquality">
+        <option value="default">default</option>
+        <option value="highres">highres</option>
+        <option value="hd1080">hd1080</option>
+        <option value="hd720">hd720</option>
+        <option value="large">large</option>
+        <option value="medium">medium</option>
+        <option value="small">small</option>
+    </select>
+</div>
+
+<p>Keyboard shortcuts:</p>
+    <ul>
+        <li>SPACE - toggle play/pause</li>
+        <li>S - switch audio</li>
+        <li>L - switch layout</li>
+        <li>X - change video in maximized view</li>
+    </ul>   
+<!--
+
+    TODO:
+    - split - overlap
+    - quality
+    - bigger view, false fullscreen?
+    - pass video id as url parameter
+      - create url button
+    - enable both audio channels
+    - sync button (sync up/down)
+    - different layouts? 
+    - change the url in the input box to the tile of the video
+
+-->
+</body>
+</html>
